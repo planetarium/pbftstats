@@ -37,6 +37,7 @@ class Stats:
         start_time = datetime.datetime.now()
         if file_name:
             _, date_str, start_str, end_str, _, _ = file_name.split("_")
+            file_path = os.path.join(self.__out_path, file_name)
             file_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
             start = int(start_str)
             end = int(end_str)
@@ -58,7 +59,7 @@ class Stats:
             df = pd.DataFrame(columns=["signer", "txn"])
             create_new = True
         else:
-            df = pd.read_csv(os.path.join(self.__out_path, file_name), delimiter="\t")
+            df = pd.read_csv(file_path, delimiter="\t")
 
         for signer in signers:
             txn = df.loc[df["signer"] == signer, "txn"]
@@ -68,10 +69,10 @@ class Stats:
                 df.loc[df["signer"] == signer, "txn"] = txn + 1
 
         if not create_new:
-            os.remove(os.path.join(self.__out_path, file_name))
+            os.remove(file_path)
         else:
             if file_name:
-                os.rename(file_name, file_name.strip("_wip"))
+                os.rename(file_path, file_path.replace("wip", ""))
 
         block_date_string = block_date.strftime("%Y-%m-%d")
         file_name = f"testpbft_{block_date_string}_{start:09}_{end + 1:09}_{len(df):05}_wip.csv"
