@@ -4,7 +4,8 @@ from setuptools import setup
 install_requires = [
     "python-dateutil",
     "pandas",
-    "requests"
+    "requests",
+    "web3"
 ]
 
 setup(
