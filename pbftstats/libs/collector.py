@@ -10,7 +10,7 @@ import json
 import pandas as pd
 from functools import reduce
 
-class Stats:
+class Collector:
 
     tx_signer_regex = re.compile(r"^tx-signer_\d{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])_\d{9}_\d{9}_\d{5}_wip.csv$")
     lastcommit_vote_regex = re.compile(r"^lastcommit-vote_\d{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])_\d{9}_\d{9}_\d{5}_wip.csv$")
@@ -202,12 +202,12 @@ class Stats:
     @staticmethod
     def get_block_slices(wip_date: datetime.datetime, blocks: dict) -> tuple:
         try:
-            slice_idx = next(i for i, block in enumerate(blocks) if Stats.get_timestamp(block) > wip_date)
+            slice_idx = next(i for i, block in enumerate(blocks) if Collector.get_timestamp(block) > wip_date)
         except StopIteration:
             return blocks, []
 
         def subslicing(acc:list, cur:list) -> list:
-            if Stats.get_timestamp(cur) > Stats.get_timestamp(acc[-1][-1]):
+            if Collector.get_timestamp(cur) > Collector.get_timestamp(acc[-1][-1]):
                 acc.append([cur])
             else:
                 acc[-1].append(cur)

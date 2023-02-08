@@ -7,7 +7,7 @@ import pandas as pd
 from eth_keys import keys
 import codecs
 
-class Reports:
+class Reporter:
 
     tx_signer_regex = re.compile(r"^tx-signer_\d{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])_\d{9}_\d{9}_\d{5}.csv$")
     lastcommit_vote_regex = re.compile(r"^lastcommit-vote_\d{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])_\d{9}_\d{9}_\d{5}.csv$")
