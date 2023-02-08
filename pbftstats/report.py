@@ -3,7 +3,9 @@ import argparse
 from pbftstats.libs.reports import Reports
 
 def report(log_path, report_path):
-    Reports(log_path, report_path).run()
+    reports = Reports(log_path, report_path)
+    reports.run_tx_signer()
+    reports.run_lastcommit_vote()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
