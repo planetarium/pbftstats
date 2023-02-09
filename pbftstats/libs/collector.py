@@ -234,3 +234,4 @@ class Collector:
     @staticmethod
     def get_height(block: dict) -> int:
         return block["index"]
+        

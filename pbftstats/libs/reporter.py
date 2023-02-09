@@ -57,3 +57,4 @@ class Reporter:
         print(report)
         os.makedirs(self.__report_path, exist_ok=True)
         report.to_csv(os.path.join(self.__report_path, "report_lastcommit_vote.csv"))
+        
