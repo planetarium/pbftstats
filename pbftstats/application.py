@@ -30,9 +30,10 @@ try:
     validator_map_url = os.environ["VALIDATOR_MAP_URL"]
 except KeyError:
     validator_map_url = "https://9c-dev-cluster-configs.s3.ap-northeast-2.amazonaws.com/pbft-validators.json"
-    
+
 
 app = Dash(__name__, title="PBFT Status")
+application = app.server
 
 @app.callback(
     Output("report_lastcommit_vote", "data"), 
@@ -64,7 +65,7 @@ def read_report_tx_signer(n):
 def get_validator_status(n):
     val_key_name = {x["publicKey"]: x["name"] for x in json.loads(requests.get(url=validator_map_url).content)["validators"]}
     url = urllib.parse.urljoin(host_url, url="graphql/explorer", allow_fragments=True)
-    body = f"query{{blockQuery{{blocks(desc:true limit:10){{index miner timestamp lastCommit{{votes{{validatorPublicKey flag}}}}}}}}nodeState{{validators{{publicKey}}}}}}"
+    body = f"query{{blockQuery{{blocks(desc:true limit:30){{index miner timestamp lastCommit{{votes{{validatorPublicKey flag}}}}}}}}nodeState{{validators{{publicKey}}}}}}"
     response = requests.post(url=url, json={"query": body})
     if response.status_code != 200:
         raise ConnectionError("Failed to get response")
@@ -90,15 +91,15 @@ def get_validator_status(n):
     return df_state.to_dict("records"), [{"name": i, "id": i} for i in df_state.columns], df_vote.to_dict("records"), [{"name": i, "id": i} for i in df_vote.columns]
 
 @app.callback(
-    Output("report", "style"), 
-    Output("status", "style"), 
+    Output("status", "style"),
+    Output("report", "style"),
+    Input("btn_status", "n_clicks"),
     Input("btn_report", "n_clicks"),
-    Input("btn_status", "n_clicks")
 )
-def update_body(btn_report, btn_status):
-    if ctx.triggered_id == "btn_report":
+def update_body(btn_status, btn_report):
+    if ctx.triggered_id == "btn_status":
         return {"display": ""}, {"display": "none"}
-    elif ctx.triggered_id == "btn_status":
+    elif ctx.triggered_id == "btn_report":
         return {"display": "none"}, {"display": ""}
     return {"display": ""}, {"display": "none"}
 
@@ -106,7 +107,17 @@ app.layout = html.Div([
     html.Header(id="header", children=[
         html.Nav(id="nav", children=[
             html.Ul([
-                html.Img(src=app.get_asset_url("logo.svg"), style={"float": "left"}),
+                html.Img(src=app.get_asset_url("logo.svg"), style={"float": "left"}),               
+                html.Li(children=[
+                    html.A("Validator Status", id="btn_status", href="#validator-status", style={
+                        "display": "block",
+                        "color": "white",
+                        "text-align": "center",
+                        "padding": "14px 16px",
+                        "text-decoration": "none"})
+                ], style={
+                    "float": "left",
+                }),
                 html.Li(children=[
                     html.A("Daily Report", id="btn_report", href="#daily-report", style={
                         "display": "block",
@@ -117,16 +128,6 @@ app.layout = html.Div([
                 ], style={
                     "float": "left",
                 }),
-                html.Li(children=[
-                    html.A("Validator Status", id="btn_status", href="#validator-status", style={
-                        "display": "block",
-                        "color": "white",
-                        "text-align": "center",
-                        "padding": "14px 16px",
-                        "text-decoration": "none"})
-                ], style={
-                    "float": "left",
-                })
             ], style={
                 "list-style-type": "none",
                 "margin": "0",
@@ -138,59 +139,6 @@ app.layout = html.Div([
     ]),
 
     html.Div(id="body", children=[
-        html.Div(id="report", children=[
-            html.H1(
-                children="Number of PreCommits per each Validator",
-                style={
-                    "textAlign": "center",
-                }
-            ),
-            dash_table.DataTable(
-                id="report_lastcommit_vote",
-                data=[],
-                style_cell={
-                    "minWidth": 95, "maxWidth": 95, "width": 95
-                },
-                style_header={
-                    "backgroundColor": "black",
-                    "color": "white",
-                    "fontWeight": "bold",
-                    "textAlign": "center",
-                },
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': 'rgb(220, 220, 220)',
-                    }
-                ],
-            ),
-            html.H1(
-                children="Number of Transactions per each Player",
-                style={
-                    "textAlign": "center",
-                }
-            ),
-            dash_table.DataTable(
-                id="report_tx_signer",
-                data=[],
-                style_cell={
-                    "minWidth": 95, "maxWidth": 95, "width": 95
-                },
-                style_header={
-                    "backgroundColor": "black",
-                    "color": "white",
-                    "fontWeight": "bold",
-                    "textAlign": "center",
-                },
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': 'rgb(220, 220, 220)',
-                    }
-                ],
-            ),
-            dcc.Interval(id="refresh_report_interval", interval=10*1000, n_intervals=0)
-        ]),
         html.Div(id="status", children=[
             html.H1(
                 children="Node Status of Validators",
@@ -243,8 +191,60 @@ app.layout = html.Div([
                 ],
             ),
             dcc.Interval(id="refresh_status_interval", interval=3*1000, n_intervals=0)
+        ]),
+        html.Div(id="report", children=[
+            html.H1(
+                children="Number of PreCommits per each Validator",
+                style={
+                    "textAlign": "center",
+                }
+            ),
+            dash_table.DataTable(
+                id="report_lastcommit_vote",
+                data=[],
+                style_cell={
+                    "minWidth": 95, "maxWidth": 95, "width": 95
+                },
+                style_header={
+                    "backgroundColor": "black",
+                    "color": "white",
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(220, 220, 220)',
+                    }
+                ],
+            ),
+            html.H1(
+                children="Number of Transactions per each Player",
+                style={
+                    "textAlign": "center",
+                }
+            ),
+            dash_table.DataTable(
+                id="report_tx_signer",
+                data=[],
+                style_cell={
+                    "minWidth": 95, "maxWidth": 95, "width": 95
+                },
+                style_header={
+                    "backgroundColor": "black",
+                    "color": "white",
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(220, 220, 220)',
+                    }
+                ],
+            ),
+            dcc.Interval(id="refresh_report_interval", interval=10*1000, n_intervals=0)
         ], style={"display": "none"}),
-        
     ]) 
 ], style={"display": "flex", "flex-direction": "column"})
 
@@ -256,4 +256,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     collect(collect_path, host_url, args.start_block_index, args.chunk_size)
     Process(target=report, args=(collect_path, report_path, args.report_interval)).start()
-    app.run_server(debug=True)
+    app.run(host="0.0.0.0", port="8080")
