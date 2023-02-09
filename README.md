@@ -14,6 +14,8 @@ pip install -e .
 python -m pbftstats.application
 ```
 
+Reports will be shown on `localhost:8080`.  
+
 ### Validator status
 ![validator_status](https://user-images.githubusercontent.com/39043516/217773295-8fca7835-0fea-4a9a-9d3f-fc528d84377d.png)
 
@@ -34,3 +36,13 @@ Number of precommits per each validator : daily precommit sum of validators
 Number of transactions per each player : daily transactions of players  
 
 Time will be taken for gathering sufficient logs before report shown on the browser.  
+
+### If you don't need report
+
+Below two lines on `application.py` is used for collecting data and generating report.  
+If you don't need, you may remove those lines.  
+
+```python
+collect(collect_path, host_url, collect_start_block_index, collect_chunk_size)
+Process(target=report, args=(collect_path, report_path, report_interval)).start()
+```
