@@ -1,7 +1,6 @@
 import argparse
 import time
-
-from pbftstats.libs.reporter import Reporter
+from libs.reporter import Reporter
 
 def report(log_path, report_path, interval):
     reporter = Reporter(log_path, report_path)
@@ -19,8 +18,8 @@ def report(log_path, report_path, interval):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--log_path", type=str, default="./stat_logs")
-    parser.add_argument("--report_path", type=str, default="./reports")
+    parser.add_argument("--log_path", type=str, default="/app/stat_logs")
+    parser.add_argument("--report_path", type=str, default="/app/reports")
     parser.add_argument("--interval", type=int, default=-1)
     args = parser.parse_args()
     report(args.log_path, args.report_path, args.interval)

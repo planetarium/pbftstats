@@ -3,25 +3,22 @@ import argparse
 import json
 import requests
 import urllib
-from dash import Dash, html, dcc, dash_table
-from dash import Input, Output, ctx
+from dash import Dash, html, dcc, dash_table, Input, Output, ctx
 from multiprocessing import Process
 import pandas as pd
-from .collect import collect 
-from .report import report
+from collect import collect 
+from report import report
 
 
-collect_path = os.getenv("COLLECT_PATH", "./stat_logs")
-report_path = os.getenv("REPORT_PATH", "./reports")
+collect_path = os.getenv("COLLECT_PATH", "/app/stat_logs")
+report_path = os.getenv("REPORT_PATH", "/app/reports")
 host_url = os.getenv("HOST_URL", "http://a9261bb03cf0a4b8e910c423c2296adf-113367791.us-east-2.elb.amazonaws.com")
 validator_map_url = os.getenv("VALIDATOR_MAP_URL", "https://9c-dev-cluster-configs.s3.ap-northeast-2.amazonaws.com/pbft-validators.json")
 collect_start_block_index = os.getenv("COLLECT_START_BLOCK_INDEX", 5963940)
 collect_chunk_size = os.getenv("COLLECT_CHUNK_SIZE", 1024)
 report_interval = os.getenv("REPORT_INTERVAL", 60)
-
-
 app = Dash(__name__, title="PBFT Status")
-application = app.server
+server = app.server
 
 @app.callback(
     Output("report_lastcommit_vote", "data"), 
@@ -239,5 +236,4 @@ app.layout = html.Div([
 if __name__ == '__main__':
     collect(collect_path, host_url, collect_start_block_index, collect_chunk_size)
     Process(target=report, args=(collect_path, report_path, report_interval)).start()
-    app.run(host="0.0.0.0", port="8080")
-    
+    app.run()

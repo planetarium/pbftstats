@@ -5,7 +5,7 @@ install_requires = [
     "python-dateutil",
     "pandas",
     "requests",
-    "web3",
+    "eth-keys",
     "dash"
 ]
 
