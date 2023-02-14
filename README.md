@@ -2,19 +2,40 @@
 
 Temporal repository for watching reports of pbft-internal status
 
-### Install
+### Install (local)
 
 ```bash
 pip install -e .
 ```
 
-### Usage
+### Usage (local)
+
+Move to app directory, then  
+```bash
+python -m application.py
+```
+Reports will be shown on `localhost:8050`.  
+
+### Install (deploy)
 
 ```bash
-python -m pbftstats.application
+pip install -r /tmp/requirements.txt
 ```
 
-Reports will be shown on `localhost:8080`.  
+### Usage (deploy)
+
+Move to app directory, then  
+```bash
+gunicorn -b :80 application:server
+```
+Reports will be shown on port `80`.  
+
+To update daily report, background app is needed.  
+You can trigger it by  
+```bash
+python -m background.py
+```
+
 
 ### Validator status
 ![validator_status](https://user-images.githubusercontent.com/39043516/217773295-8fca7835-0fea-4a9a-9d3f-fc528d84377d.png)
@@ -37,7 +58,7 @@ Number of transactions per each player : daily transactions of players
 
 Time will be taken for gathering sufficient logs before report shown on the browser.  
 
-### If you don't need report
+### If you don't need report on local mode
 
 Below two lines on `application.py` is used for collecting data and generating report.  
 If you don't need, you may remove those lines.  
