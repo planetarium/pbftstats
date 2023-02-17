@@ -13,4 +13,4 @@ RUN python3.8 -m pip install -r /tmp/requirements.txt
 EXPOSE 80
 
 CMD [ "python3.8" , "background.py" ]
-ENTRYPOINT [ "gunicorn", "-w", "1", "-b", ":80", "application:server"]
+ENTRYPOINT [ "gunicorn", "-w", "4", "-b", ":80", "application:server"]
