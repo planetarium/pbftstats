@@ -23,14 +23,14 @@ if __name__ == '__main__':
         f"--host_url={host_url}", 
         f"--query_validator_key={query_validator_key}", 
         f"--start_block_index={collect_start_block_index}",
-        f"--chunk_size_collect={chunk_size_collect}"
-        f"--chunk_size_recent={chunk_size_recent}"
-        f"--interval_collect={interval_collect}"
-        f"--interval_retry={interval_retry}"
+        f"--chunk_size_collect={chunk_size_collect}",
+        f"--chunk_size_recent={chunk_size_recent}",
+        f"--interval_collect={interval_collect}",
+        f"--interval_retry={interval_retry}",
         f"--interval_recent={interval_recent}"])
     Popen([
         "python3.8", 
-        "report.py"
+        "report.py",
         f"--log_path={collect_path}",
         f"--report_path={report_path}",
         f"--interval={interval_report}"])
