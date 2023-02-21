@@ -2,11 +2,13 @@ from __future__ import annotations
 from typing import Optional
 import os
 import re
+import time
 import datetime
 import dateutil
 import urllib
 import requests
 import json
+import numpy as np
 import pandas as pd
 from functools import reduce
 
@@ -20,17 +22,25 @@ class Collector:
         self.__host_url = urllib.parse.urljoin(host_url, url="graphql/explorer", allow_fragments=True)
         self.__start_block_index = start_block_index
     
-    def run_tx_signer(self, chunk_size: int):
+    def run_tx_signer(self, chunk_size: int, interval: int):
         print("Gathering transaction signers...")
         while(True):
             wip = self.lookup_wip(self.tx_signer_regex)
             self.update_tx_signer(wip, chunk_size)
+            time.sleep(interval)
 
-    def run_lastcommit_vote(self, chunk_size: int):
+    def run_lastcommit_vote(self, chunk_size: int, interval: int):
         print("Gathering lastcommit votes...")
         while(True):
             wip = self.lookup_wip(self.lastcommit_vote_regex)
             self.update_lastcommit_vote(wip, chunk_size)
+            time.sleep(interval)
+
+    def run_recent_status(self, query_validator_key: str, chunk_size: int, interval: int):
+        print("Gathering recent status...")
+        while(True):
+            self.update_recent_status(query_validator_key, chunk_size)
+            time.sleep(interval)
 
     def lookup_wip(self, regex_wip: re.Pattern) -> Optional[os.DirEntry]:
         os.makedirs(self.__out_path, exist_ok=True)
@@ -39,6 +49,90 @@ class Collector:
                 return file
         return None
 
+    def update_recent_status(self, query_validator_key: str, chunk_size: int):
+
+        recent_status_path = os.path.join(self.__out_path, "recent.csv")
+        problem_gather_path = os.path.join(self.__out_path, "problem.csv")
+        
+        os.makedirs(self.__out_path, exist_ok=True)
+
+        try:
+            df_recent = pd.read_csv(recent_status_path, index_col=0)
+        except FileNotFoundError:
+            df_recent = pd.DataFrame()
+
+        try:
+            df_problem = pd.read_csv(problem_gather_path, index_col=0)
+        except FileNotFoundError:
+            df_problem = pd.DataFrame(columns=["validators"])
+        
+        unknown = "\U000026AA"
+        present = "\U0001F7E2"
+        absent = "\U0001F534"
+
+        data = self.parse_response(self.query(self.__host_url, True, 0, chunk_size))
+
+        for block in data["data"]["blockQuery"]["blocks"]:
+            block_idx = block["index"]
+            df_recent.loc[block_idx, "proposer"] = block["miner"]
+            for vote in block["lastCommit"]["votes"]:
+                lastcommit_idx = block["index"] - 1
+                df_recent.loc[lastcommit_idx, "round"] = block["lastCommit"]["round"]
+                try:
+                    last_val = df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]]
+                except KeyError:
+                    last_val = np.nan
+                if pd.isnull(last_val):
+                    if vote["flag"] == "PreCommit": 
+                        df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] = " | ".join([unknown, present])
+                    else:
+                        df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] = " | ".join([unknown, absent])
+                else:
+                    if vote["flag"] == "PreCommit": 
+                        df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] = df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]][:-1] + present
+                    else:
+                        df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] = df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]][:-1] + absent
+                        if df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] == " | ".join([present, absent]):
+                            try:
+                                prob_val = df_problem.loc[lastcommit_idx, "validators"]
+                            except KeyError:
+                                prob_val = np.nan
+                            if pd.isnull(prob_val):
+                                df_problem.loc[lastcommit_idx, "validators"] = vote["validatorPublicKey"]
+                            else:
+                                publicKeys = ";".join(set(prob_val.split(";") + [prob_val]))
+                                df_problem.loc[lastcommit_idx, "validators"] = publicKeys
+        
+        online_validators = [x["publicKey"] for x in data["data"]["nodeState"]["validators"]] + [query_validator_key]
+
+        online_idx = data["data"]["blockQuery"]["blocks"][0]["index"] + 1
+        for col in df_recent.columns[2:]:
+            if col in online_validators:
+                try:
+                    online_val = df_recent.loc[online_idx, col]
+                except KeyError:
+                    online_val = np.nan
+                if pd.isnull(online_val):
+                    df_recent.loc[online_idx, col] = " | ".join([present, unknown])
+                else:
+                    df_recent.loc[online_idx, col] = present + online_val[1:]
+            else:
+                try:
+                    online_val = df_recent.loc[online_idx, col]
+                except KeyError:
+                    online_val = np.nan
+                if pd.isnull(online_val):
+                    df_recent.loc[online_idx, col] = " | ".join([absent, unknown])
+                else:
+                    df_recent.loc[online_idx, col] = absent + online_val[1:]
+
+        df_recent = df_recent.sort_index(ascending=True)
+        df_recent = df_recent.iloc[-(chunk_size + 2):]
+
+        df_recent.to_csv(recent_status_path)
+
+        df_problem = df_problem.sort_index(ascending=True)
+        df_problem.to_csv(problem_gather_path)
 
     def update_tx_signer(self, file: Optional[os.DirEntry], chunk_size: int):
 
@@ -60,7 +154,7 @@ class Collector:
         blocks_current, blocks_next_nested = self.get_block_slices(wip["date"], self.get_blocks(data))
 
         if file:
-            df_current = pd.read_csv(file.path, delimiter="\t")
+            df_current = pd.read_csv(file.path)
         
         for block in blocks_current:
             tx_signers = self.get_tx_signers(block)
@@ -76,7 +170,7 @@ class Collector:
             wip["summary"] = [f"{len(df_current):05}"]
             file_name = self.construct_wip_name(wip)
             fpath = os.path.join(self.__out_path, file_name)
-            df_current.to_csv(fpath, sep="\t", index=False)
+            df_current.to_csv(fpath, index=False)
             os.remove(file.path)
             
         if len(blocks_next_nested) > 0 and fpath:
@@ -98,7 +192,7 @@ class Collector:
                 fpath = os.path.join(self.__out_path, file_name)
                 if i < (len(blocks_next_nested) - 1):
                     fpath = fpath.replace("_wip", "")
-                df_next.to_csv(fpath, sep="\t", index=False)
+                df_next.to_csv(fpath, index=False)
                 
     def update_lastcommit_vote(self, file: Optional[os.DirEntry], chunk_size: int):
 
@@ -125,7 +219,7 @@ class Collector:
         blocks_current, blocks_next_nested = self.get_block_slices(wip["date"], self.get_blocks(data))
 
         if file:
-            df_current = pd.read_csv(file.path, delimiter="\t")
+            df_current = pd.read_csv(file.path)
         
         for block in blocks_current:
             votes = self.get_votes(block)
@@ -141,7 +235,7 @@ class Collector:
             wip["summary"] = [f"{len(df_current):05}"]
             file_name = self.construct_wip_name(wip)
             fpath = os.path.join(self.__out_path, file_name)
-            df_current.to_csv(fpath, sep="\t", index=False)
+            df_current.to_csv(fpath, index=False)
             os.remove(file.path)
             
         if len(blocks_next_nested) > 0 and fpath:
@@ -163,10 +257,10 @@ class Collector:
                 fpath = os.path.join(self.__out_path, file_name)
                 if i < (len(blocks_next_nested) - 1):
                     fpath = fpath.replace("_wip", "")
-                df_next.to_csv(fpath, sep="\t", index=False)
+                df_next.to_csv(fpath, index=False)
 
     def get_data_from_wip(self, end: int, chunk_size: int) -> dict:
-        response = self.query(self.__host_url, end + 1, chunk_size)
+        response = self.query(self.__host_url, False, end + 1, chunk_size)
         data = self.parse_response(response)
         return data
     
@@ -186,8 +280,9 @@ class Collector:
         }
 
     @staticmethod
-    def query(url: str, start_index: int, chunk_size: int) -> requests.Response:
-        body = f"query{{blockQuery{{blocks(desc:false offset:{start_index} limit:{chunk_size}){{index miner transactions{{publicKey}} timestamp lastCommit{{votes{{validatorPublicKey flag}}}}}}}}}}"
+    def query(url: str, desc: bool, start_index: int, chunk_size: int) -> requests.Response:
+        body = (f"query{{blockQuery{{blocks(desc:{str(desc).lower()} offset:{start_index} limit:{chunk_size})"
+        f"{{index miner transactions{{publicKey}} timestamp lastCommit{{round votes{{validatorPublicKey flag}}}}}}}}nodeState{{validators{{publicKey}}}}}}")
         return requests.post(url=url, json={"query": body})
 
     @staticmethod

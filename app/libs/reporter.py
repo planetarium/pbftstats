@@ -21,7 +21,7 @@ class Reporter:
         for file in os.scandir(self.__log_path):
             if regex.match(file.name):
                 _, date_str, _, _, _ = file.name.split("_")
-                df = pd.read_csv(file.path, delimiter="\t")
+                df = pd.read_csv(file.path)
                 df["date"] = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
                 df["signer"] = df["signer"].apply(
                     lambda x: keys.PublicKey.from_compressed_bytes(
@@ -34,7 +34,7 @@ class Reporter:
         for file in os.scandir(self.__log_path):
             if regex.match(file.name):
                 _, date_str, _, _, _  = file.name.split("_")
-                df = pd.read_csv(file.path, delimiter="\t")
+                df = pd.read_csv(file.path)
                 df["date"] = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
                 logs.append(df)
         return logs
@@ -43,9 +43,7 @@ class Reporter:
         logs = self.read_logs_tx_signer(self.tx_signer_regex)
         concatenated = pd.concat(logs, ignore_index=True)
         report = concatenated.groupby(["date", "signer"]).sum()
-        print(logs)
         report = pd.pivot_table(report, values="n_tx", index="signer", columns="date").fillna(0).astype(int)
-        print(report)
         os.makedirs(self.__report_path, exist_ok=True)
         report.to_csv(os.path.join(self.__report_path, "report_tx_signer.csv"))
 
@@ -54,7 +52,6 @@ class Reporter:
         concatenated = pd.concat(logs, ignore_index=True)
         report = concatenated.groupby(["date", "validator"]).sum()
         report = pd.pivot_table(report, values="n_precommit", index="validator", columns="date").fillna(0).astype(int)
-        print(report)
         os.makedirs(self.__report_path, exist_ok=True)
         report.to_csv(os.path.join(self.__report_path, "report_lastcommit_vote.csv"))
         

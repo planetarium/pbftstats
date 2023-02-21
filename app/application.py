@@ -14,11 +14,22 @@ collect_path = os.getenv("COLLECT_PATH", "/app/stat_logs")
 report_path = os.getenv("REPORT_PATH", "/app/reports")
 host_url = os.getenv("HOST_URL", "http://a9261bb03cf0a4b8e910c423c2296adf-113367791.us-east-2.elb.amazonaws.com")
 validator_map_url = os.getenv("VALIDATOR_MAP_URL", "https://9c-dev-cluster-configs.s3.ap-northeast-2.amazonaws.com/pbft-validators.json")
-collect_start_block_index = os.getenv("COLLECT_START_BLOCK_INDEX", 5963940)
-collect_chunk_size = os.getenv("COLLECT_CHUNK_SIZE", 1024)
-report_interval = os.getenv("REPORT_INTERVAL", 60)
+query_validator_key = os.getenv("QUERY_VALIDATOR_KEY", "03461fb858bd9852ab699477a7ae7b11aefff0797ab5b0342d57b1d38f3560a23e")
+
+collect_start_block_index = int(os.getenv("COLLECT_START_BLOCK_INDEX", "5963940"))
+chunk_size_collect = int(os.getenv("CHUNK_SIZE_COLLECT", "512"))
+chunk_size_recent = int(os.getenv("CHUNK_SIZE_RECENT", "30"))
+interval_collect = int(os.getenv("INTERVAL_COLLECT", "1"))
+interval_recent = int(os.getenv("INTERVAL_RECENT", "5"))
+interval_retry = int(os.getenv("INTERVAL_RETRY", "60"))
+interval_report = int(os.getenv("INTERVAL_REPORT", "60"))
+
+
 app = Dash(__name__, title="PBFT Status")
 server = app.server
+
+mem = {}
+mem["node_status"] = pd.DataFrame()
 
 @app.callback(
     Output("report_lastcommit_vote", "data"), 
@@ -43,37 +54,49 @@ def read_report_tx_signer(n):
 @app.callback(
     Output("validator_status", "data"),
     Output("validator_status", "columns"),
-    Output("validator_votes", "data"),
-    Output("validator_votes", "columns"),
     Input("refresh_status_interval", "n_intervals")
 )
 def get_validator_status(n):
+    path = os.path.join(collect_path, "recent.csv")
+    try:
+        df_recent = pd.read_csv(path, index_col=0)
+    except FileNotFoundError:
+        df_recent = pd.DataFrame()
+
     val_key_name = {x["publicKey"]: x["name"] for x in json.loads(requests.get(url=validator_map_url).content)["validators"]}
-    url = urllib.parse.urljoin(host_url, url="graphql/explorer", allow_fragments=True)
-    body = f"query{{blockQuery{{blocks(desc:true limit:30){{index miner timestamp lastCommit{{votes{{validatorPublicKey flag}}}}}}}}nodeState{{validators{{publicKey}}}}}}"
-    response = requests.post(url=url, json={"query": body})
-    if response.status_code != 200:
-        raise ConnectionError("Failed to get response")
-    data = json.loads(response.content)
-
-    online_validators = [x["publicKey"] for x in data["data"]["nodeState"]["validators"]] + ["03461fb858bd9852ab699477a7ae7b11aefff0797ab5b0342d57b1d38f3560a23e"]
-    df_vote = pd.DataFrame()
-    for block in data["data"]["blockQuery"]["blocks"]:
-        for vote in block["lastCommit"]["votes"]:
-            df_vote.loc[block["index"], vote["validatorPublicKey"]] = "\U0001F7E2" if vote["flag"] == "PreCommit" else "\U0001F534"
+    val_addr_name = {x["address"]: x["name"] for x in json.loads(requests.get(url=validator_map_url).content)["validators"]}
     
-    df_state = pd.DataFrame(columns=df_vote.columns)
-    df_vote = df_vote.fillna("\U0001F534")
-    df_vote.rename(columns=val_key_name, inplace=True)
-    df_vote.reset_index(inplace=True)
+    try:
+        df_recent["proposer"] = df_recent["proposer"].apply(lambda v: val_addr_name[v] if v in val_addr_name else v)
+    except Exception as e:
+        print(e)
+    df_recent.rename(columns=val_key_name, inplace=True)
+    df_recent = df_recent.sort_index(ascending=False)
+    df_recent.reset_index(inplace=True)
 
-    for online_validator in online_validators:
-        if online_validator in df_state.columns:
-            df_state.loc[1, online_validator] = "\U0001F7E2"
-    df_state = df_state.fillna("\U0001F534")
-    df_state.rename(columns=val_key_name, inplace=True)
+    return df_recent.to_dict("records"), [{"name": i, "id": i} for i in df_recent.columns]
 
-    return df_state.to_dict("records"), [{"name": i, "id": i} for i in df_state.columns], df_vote.to_dict("records"), [{"name": i, "id": i} for i in df_vote.columns]
+@app.callback(
+    Output("latest_ill_cases", "data"),
+    Output("latest_ill_cases", "columns"),
+    Input("refresh_status_interval", "n_intervals")
+)
+def get_latest_ill_cases(n):
+    path = os.path.join(collect_path, "problem.csv")
+    try:
+        df_problem = pd.read_csv(path, index_col=0)
+    except FileNotFoundError:
+        df_problem = pd.DataFrame()
+
+    val_key_name = {x["publicKey"]: x["name"] for x in json.loads(requests.get(url=validator_map_url).content)["validators"]}    
+    try:
+        df_problem["validators"] = df_problem["validators"].apply(lambda v: ";".join([val_key_name[x] if x in val_key_name else x for x in v.split(";")]))
+    except Exception as e:
+        print(e)
+    df_problem = df_problem.sort_index(ascending=False)
+    df_problem.reset_index(inplace=True)
+
+    return df_problem.to_dict("records"), [{"name": i, "id": i} for i in df_problem.columns]
 
 @app.callback(
     Output("status", "style"),
@@ -126,16 +149,19 @@ app.layout = html.Div([
     html.Div(id="body", children=[
         html.Div(id="status", children=[
             html.H1(
-                children="Node Status of Validators",
+                children="Node Status of Validators (Online | Vote)",
                 style={
                     "textAlign": "center",
                 }
+            ),
+            html.Legend(
+                children="\U0001F7E2 : Present, \U0001F534 : Absent, \U000026AA : Unknown"
             ),
             dash_table.DataTable(
                 id="validator_status",
                 data=[],
                 style_cell={
-                    "minWidth": 95, "maxWidth": 95, "width": 95, "textAlign": "center"
+                    "minWidth": 70, "maxWidth": 95, "width": 70, "textAlign": "center"
                 },
                 style_header={
                     "backgroundColor": "black",
@@ -151,16 +177,19 @@ app.layout = html.Div([
                 ],
             ),
             html.H1(
-                children="Latest Votes of Validators",
+                children="Latest Ill Cases",
                 style={
                     "textAlign": "center",
                 }
             ),
+            html.Legend(
+                children="Validator was online, but couldn't vote"
+            ),
             dash_table.DataTable(
-                id="validator_votes",
+                id="latest_ill_cases",
                 data=[],
                 style_cell={
-                    "minWidth": 95, "maxWidth": 95, "width": 95, "textAlign": "center"
+                    "minWidth": 70, "maxWidth": 95, "width": 70, "textAlign": "center"
                 },
                 style_header={
                     "backgroundColor": "black",
@@ -234,6 +263,6 @@ app.layout = html.Div([
 ], style={"display": "flex", "flex-direction": "column"})
 
 if __name__ == '__main__':
-    collect(collect_path, host_url, collect_start_block_index, collect_chunk_size)
-    Process(target=report, args=(collect_path, report_path, report_interval)).start()
+    Process(target=collect, args=(collect_path, host_url, collect_start_block_index, chunk_size_collect, chunk_size_recent, interval_collect, interval_recent, interval_retry, query_validator_key)).start()
+    Process(target=report, args=(collect_path, report_path, interval_report)).start()
     app.run()
