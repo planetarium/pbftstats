@@ -90,7 +90,7 @@ def get_latest_ill_cases(n):
 
     val_key_name = {x["publicKey"]: x["name"] for x in json.loads(requests.get(url=validator_map_url).content)["validators"]}    
     try:
-        df_problem["publicKey"] = df_problem["publicKey"].apply(lambda v: val_key_name[v] if v in val_key_name else v)
+        df_problem["validators"] = df_problem["validators"].apply(lambda v: ";".join([val_key_name[x] if x in val_key_name else x for x in v.split(";")]))
     except Exception as e:
         print(e)
     df_problem = df_problem.sort_index(ascending=False)

@@ -64,7 +64,7 @@ class Collector:
         try:
             df_problem = pd.read_csv(problem_gather_path, index_col=0)
         except FileNotFoundError:
-            df_problem = pd.DataFrame(["publicKey"])
+            df_problem = pd.DataFrame(columns=["validators"])
         
         unknown = "\U000026AA"
         present = "\U0001F7E2"
@@ -94,13 +94,14 @@ class Collector:
                         df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] = df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]][:-1] + absent
                         if df_recent.loc[lastcommit_idx, vote["validatorPublicKey"]] == " | ".join([present, absent]):
                             try:
-                                prob_val = df_problem.loc[lastcommit_idx, "publicKey"]
+                                prob_val = df_problem.loc[lastcommit_idx, "validators"]
                             except KeyError:
                                 prob_val = np.nan
-                            if pd.isnull(df_problem.loc[lastcommit_idx, "publicKey"]):
-                                df_problem.loc[lastcommit_idx, "publicKey"] = vote["validatorPublicKey"]
+                            if pd.isnull(prob_val):
+                                df_problem.loc[lastcommit_idx, "validators"] = vote["validatorPublicKey"]
                             else:
-                                df_problem.loc[lastcommit_idx, "publicKey"] = ", ".join(prob_val, vote["validatorPublicKey"])
+                                publicKeys = ";".join(set(prob_val.split(";") + [prob_val]))
+                                df_problem.loc[lastcommit_idx, "validators"] = publicKeys
         
         online_validators = [x["publicKey"] for x in data["data"]["nodeState"]["validators"]] + [query_validator_key]
 
