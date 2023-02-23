@@ -12,4 +12,4 @@ RUN python3.8 -m pip install -r /tmp/requirements.txt
 
 EXPOSE 80
 
-CMD /app/script.sh
+CMD ["sh", "script.sh"]
