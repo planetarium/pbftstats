@@ -129,6 +129,8 @@ class Collector:
         df_recent = df_recent.sort_index(ascending=True)
         df_recent = df_recent.iloc[-(chunk_size + 2):]
 
+        validators = list(dict.fromkeys(sum([[vote["validatorPublicKey"] for vote in block["lastCommit"]["votes"]] for block in data["data"]["blockQuery"]["blocks"]], [])))
+        df_recent = df_recent[["proposer", "round"] + validators]
         df_recent.to_csv(recent_status_path)
 
         df_problem = df_problem.sort_index(ascending=True)
